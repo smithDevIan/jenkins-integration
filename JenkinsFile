@@ -1,0 +1,53 @@
+#!/usr/bin/env groovy
+pipeline {
+	agent any
+
+  environment {
+    registryCredential = 'cleanisha'
+    version = '1.0.0'
+  }
+
+  tools {
+		maven 'M3'
+	}
+
+	stages {
+		stage('Build'){
+			steps {
+				sh "mvn clean package -DskipTests"
+			}
+		}
+
+    stage('Build Docker Images') {
+        steps {
+            script {
+              docker.withTool('docker') {
+                admin = docker.build("hesed/account:${version}")
+              }
+            }
+        }
+    }
+
+    stage('Push Docker Images') {
+        steps {
+            script {
+              docker.withTool('docker') {
+                docker.withRegistry('https://registry.skylabsystems.co.ke', registryCredential ) {
+                  admin.push(version)
+                }
+              }
+            }
+        }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        script {
+          withKubeCredentials(kubectlCredentials: [[caCertificate: '', clusterName: 'local', contextName: '', credentialsId: 'KUBERNETES_TOKEN', namespace: 'default', serverUrl: 'https://192.168.100.118:6443']]){
+            sh 'kubectl apply -f deployment.yaml'
+          }
+        }
+      }
+    }
+	}
+}
